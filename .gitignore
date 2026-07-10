@@ -1,0 +1,12 @@
+# Buildozer / Android
+.buildozer/
+bin/
+*.apk
+*.aab
+
+# Python
+__pycache__/
+*.pyc
+
+# Ayar (kişisel)
+ayarlar.json
