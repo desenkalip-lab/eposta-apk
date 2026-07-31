@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build-android:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - name: Kodu al
         uses: actions/checkout@v4
@@ -19,20 +19,53 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Sistem paketleri
+      # Favori Mesaj'in CALISAN sistem paketleri (libtool-bin + libltdl-dev
+      # sart: yoksa libffi derlenirken LT_SYS_SYMBOL_USCORE hatasi verir)
+      - name: Sistem araclari
         run: |
           sudo apt-get update
-          sudo apt-get install -y git zip unzip openjdk-17-jdk python3-pip \
-            autoconf libtool pkg-config zlib1g-dev libncurses-dev cmake \
-            libffi-dev libssl-dev build-essential ccache libltdl-dev
+          sudo apt-get install -y \
+            build-essential ccache git zip unzip patch \
+            autoconf automake libtool libtool-bin libltdl-dev \
+            pkg-config cmake \
+            zlib1g-dev libffi-dev libssl-dev libncurses-dev \
+            openjdk-17-jdk-headless
+          JH=$(ls -d /usr/lib/jvm/java-17-openjdk* | head -1)
+          echo "JAVA_HOME=$JH" >> "$GITHUB_ENV"
+          echo "$JH/bin" >> "$GITHUB_PATH"
 
-      - name: Buildozer kur
+      # KARARLI surumler: p4a 2024.1.21 -> Python 3.11 derler (3.14 patlamasi biter)
+      - name: Buildozer + python-for-android (kararli)
         run: |
-          python -m pip install --upgrade pip
-          pip install buildozer cython==0.29.36
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install "cython==0.29.36" "buildozer==1.5.0" "python-for-android==2024.1.21" virtualenv
+          buildozer --version
+
+      - name: Onbellegi geri yukle
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: buildozer-${{ runner.os }}-${{ github.run_number }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
 
       - name: APK derle
-        run: yes | buildozer android debug
+        run: buildozer -v android debug
+
+      - name: Onbellegi kaydet
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: buildozer-${{ runner.os }}-${{ github.run_number }}
 
       - name: APK yukle (artifact)
         uses: actions/upload-artifact@v4
@@ -44,5 +77,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: apk-${{ github.run_number }}
-          name: E-Posta Araci APK build ${{ github.run_number }}
+          name: E-Posta Araci APK ${{ github.run_number }}
           files: bin/*.apk
