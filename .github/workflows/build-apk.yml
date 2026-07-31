@@ -32,7 +32,7 @@ jobs:
           pip install buildozer cython==0.29.36
 
       - name: APK derle
-        run: buildozer android debug
+        run: yes | buildozer android debug
 
       - name: APK yukle (artifact)
         uses: actions/upload-artifact@v4
