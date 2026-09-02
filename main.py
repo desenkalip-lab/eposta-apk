@@ -31,7 +31,10 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
 from kivy.uix.popup import Popup
 from kivy.uix.switch import Switch
-from kivy.core.clipboard import Clipboard
+try:
+    from kivy.core.clipboard import Clipboard   # Android'de sağlayıcı patlarsa uygulama açılmasın diye korumalı
+except Exception:
+    Clipboard = None
 
 import eposta_cekirdek as c
 
@@ -73,6 +76,29 @@ class Kart(BoxLayout):
 
 class EpostaApp(App):
     def build(self):
+        # Açılışta herhangi bir şey patlarsa uygulama sessizce kapanmasın;
+        # hatayı EKRANDA göster (telefonda logcat okumak zor).
+        try:
+            return self._build_ic()
+        except Exception:
+            import traceback
+            iz = traceback.format_exc()
+            try:
+                with open(os.path.join(self.user_data_dir, "acilis_hatasi.txt"),
+                          "w", encoding="utf-8") as f:
+                    f.write(iz)
+            except Exception:
+                pass
+            sv = ScrollView()
+            lbl = Label(text="AÇILIŞ HATASI:\n\n" + iz, color=(0.85, 0.1, 0.1, 1),
+                        font_size="12sp", halign="left", valign="top", size_hint_y=None,
+                        padding=(dp(10), dp(10)))
+            lbl.bind(width=lambda w, v: setattr(lbl, "text_size", (lbl.width, None)),
+                     texture_size=lambda w, v: setattr(lbl, "height", lbl.texture_size[1]))
+            sv.add_widget(lbl)
+            return sv
+
+    def _build_ic(self):
         self.title = "E-Posta Aracı"
         Window.clearcolor = BG
         # Ayar dosyası: uygulamanın özel klasörü
