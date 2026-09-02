@@ -58,8 +58,13 @@ jobs:
       # Onbellekten gelmis olabilecek ESKI p4a klonunu (master/3.14) sil ki
       # buildozer p4a.branch = v2024.01.21'i TAZE klonlasin. Agir indirmeler
       # (~/.buildozer, gradle) korunur, sadece p4a checkout'u yenilenir.
-      - name: Eski p4a klonunu temizle
-        run: rm -rf .buildozer/android/platform/python-for-android
+      - name: Eski p4a klonu + dist'i temizle
+        # p4a klonunu (master/3.14) sil + hazir dist'i sil ki AndroidManifest
+        # (targetSdkVersion = android.api) her derlemede YENIDEN uretilsin.
+        # Agir derlemeler (CPython/NDK, build/other_builds) onbellekte kalir.
+        run: |
+          rm -rf .buildozer/android/platform/python-for-android
+          rm -rf .buildozer/android/platform/build-*/dists
 
       - name: APK derle
         run: buildozer -v android debug
