@@ -36,7 +36,7 @@ android.permissions = INTERNET,ACCESS_NETWORK_STATE
 android.accept_sdk_license = True
 
 # API seviyeleri
-android.api = 33
+android.api = 34
 android.minapi = 24
 android.archs = arm64-v8a,armeabi-v7a
 android.debug_artifact = apk
