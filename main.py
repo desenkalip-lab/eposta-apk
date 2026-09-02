@@ -31,6 +31,7 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
 from kivy.uix.popup import Popup
 from kivy.uix.switch import Switch
+from kivy.core.clipboard import Clipboard
 
 import eposta_cekirdek as c
 
@@ -106,7 +107,7 @@ class EpostaApp(App):
         return h[a] if 0 <= a < len(h) else {}
 
     def _acilis(self):
-        if self.ayar.get("eposta") and self.ayar.get("sifre"):
+        if c.kimlik_var(self.ayar):
             self.git("liste")
             self.yenile()
         else:
@@ -285,7 +286,7 @@ class EpostaApp(App):
         self.onay("Çöpü Boşalt", "Silinmiş kutusundaki TÜM mesajlar kalıcı silinsin mi?", onayla)
 
     def yenile(self):
-        if not (self.ayar.get("eposta") and self.ayar.get("sifre")):
+        if not c.kimlik_var(self.ayar):
             self.uyari("Eksik", "Önce Ayarlar'dan hesap ekle.")
             self.git("ayarlar")
             return
@@ -673,7 +674,7 @@ class EpostaApp(App):
 
     def _gonder(self):
         ayar = dict(self.ayar)
-        if not (ayar.get("eposta") and ayar.get("sifre")):
+        if not c.kimlik_var(ayar):
             self.uyari("Eksik", "Önce hesap ekle.")
             self.git("ayarlar")
             return
@@ -729,6 +730,13 @@ class EpostaApp(App):
         g.add_widget(yardim)
         g.add_widget(self._etiket("Gmail/Hotmail'de NORMAL şifre çalışmaz; uygulama şifresi gerekir.",
                                   MUTED, "11sp"))
+        # Hotmail/Outlook: Microsoft basic auth'u kapattı → şifresiz OAuth girişi.
+        msb = duz_dugme("🔐 Microsoft ile Giriş (Hotmail)", PRIMARY_D, boy=46)
+        msb.bind(on_release=lambda *a: self._ms_giris())
+        g.add_widget(msb)
+        g.add_widget(self._etiket("Hotmail/Outlook için şifre yerine bunu kullan: "
+                                  "üstteki kutuya adresini yaz, düğmeye bas, çıkan kodu "
+                                  "microsoft.com/device'de gir.", MUTED, "11sp"))
 
         satir = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(6))
         kb = duz_dugme("💾 Kaydet", PRIMARY)
@@ -857,6 +865,101 @@ class EpostaApp(App):
         self._durum("Hesap kaydedildi.")
         self.uyari("Tamam", "Hesap kaydedildi. Test etmek için 🔌 Test'e bas.")
 
+    # ---- Microsoft (Hotmail/Outlook) şifresiz giriş: cihaz kodu akışı ----
+    def _panoya(self, metin):
+        try:
+            Clipboard.copy(metin)
+            self._durum("Kod kopyalandı.")
+        except Exception:
+            pass
+
+    def _ms_giris(self):
+        eposta = self.ti_eposta.text.strip()
+        if not eposta:
+            self.uyari("E-posta gerekli",
+                       "Önce üstteki kutuya Hotmail/Outlook adresini yaz, "
+                       "sonra bu düğmeye bas.")
+            return
+        self._durum("Microsoft kodu alınıyor…")
+        self.arka(lambda: c.ms_cihaz_kodu(),
+                  lambda v: self._ms_kod_goster(eposta, v))
+
+    def _ms_kod_goster(self, eposta, v):
+        self._durum("Microsoft girişi bekleniyor…")
+        self._ms_iptal = False
+        kod = v.get("user_code", "")
+        uri = v.get("verification_uri", "https://microsoft.com/device")
+        icerik = BoxLayout(orientation="vertical", padding=dp(14), spacing=dp(8))
+        icerik.add_widget(self._etiket(
+            "1) Aşağıdaki adresi aç\n2) Bu kodu gir\n3) Hotmail hesabınla giriş yap",
+            TEXT, "14sp"))
+        icerik.add_widget(self._etiket(uri, LINK, "15sp", bold=True))
+        icerik.add_widget(self._etiket(kod, PRIMARY, "30sp", bold=True))
+        pop = Popup(title="Microsoft ile Giriş", content=icerik,
+                    size_hint=(0.92, 0.6), auto_dismiss=False)
+        self._ms_pop = pop
+        satir = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
+        ab = duz_dugme("🌐 Aç", PRIMARY)
+        ab.bind(on_release=lambda *a: self.url_ac(uri))
+        satir.add_widget(ab)
+        cb = duz_dugme("📋 Kodu Kopyala", (0.9, 0.91, 0.95, 1), TEXT)
+        cb.bind(on_release=lambda *a: self._panoya(kod))
+        satir.add_widget(cb)
+        icerik.add_widget(satir)
+        ib = duz_dugme("İptal", (0.882, 0.114, 0.282, 1), boy=44)
+
+        def iptal(*a):
+            self._ms_iptal = True
+            pop.dismiss()
+            self._durum("İptal edildi.")
+        ib.bind(on_release=iptal)
+        icerik.add_widget(ib)
+        pop.open()
+        dc = v.get("device_code")
+        interval = v.get("interval", 5)
+        expires = v.get("expires_in", 900)
+        self.arka(lambda: c.ms_token_bekle(dc, interval, expires,
+                                           lambda: getattr(self, "_ms_iptal", False)),
+                  lambda tok: self._ms_tamam(eposta, tok),
+                  lambda msg: self._ms_hata(msg))
+
+    def _ms_tamam(self, eposta, tok):
+        try:
+            self._ms_pop.dismiss()
+        except Exception:
+            pass
+        bilgi = c.SAGLAYICILAR["Outlook / Hotmail"]
+        hesap = c._hesap_normalize({
+            "saglayici": "Outlook / Hotmail", "eposta": eposta, "sifre": "",
+            "smtp_host": bilgi["smtp_host"], "smtp_port": bilgi["smtp_port"],
+            "imap_host": bilgi["imap_host"], "imap_port": bilgi["imap_port"],
+            "refresh_token": tok.get("refresh_token", "")})
+        idx = None
+        for i, h in enumerate(self.cfg["hesaplar"]):
+            if h.get("eposta", "").lower() == eposta.lower():
+                idx = i
+                break
+        if idx is None:
+            self.cfg["hesaplar"].append(hesap)
+            self.cfg["aktif"] = len(self.cfg["hesaplar"]) - 1
+        else:
+            self.cfg["hesaplar"][idx] = hesap
+            self.cfg["aktif"] = idx
+        c.yapilandirma_kaydet(self.cfg)
+        self._hesap_spinner_guncelle()
+        self._hesap_liste_doldur()
+        self.ti_eposta.text = ""
+        self.ti_sifre.text = ""
+        self._durum("Microsoft girişi tamam.")
+        self.uyari("Tamam", "Hotmail hesabın eklendi. 📥 Gelen'e geçip Yenile'ye bas.")
+
+    def _ms_hata(self, msg):
+        try:
+            self._ms_pop.dismiss()
+        except Exception:
+            pass
+        self._genel_hata(msg)
+
     def _hesap_liste_doldur(self):
         self.hesap_liste.clear_widgets()
         for i, h in enumerate(self.cfg["hesaplar"]):
@@ -897,13 +1000,19 @@ class EpostaApp(App):
     def _baglanti_test(self):
         eposta = self.ti_eposta.text.strip() or self.ayar.get("eposta", "")
         sifre = self.ti_sifre.text or self.ayar.get("sifre", "")
-        if not eposta or not sifre:
-            self.uyari("Eksik", "E-posta ve şifre gerekli.")
-            return
-        bilgi = c.SAGLAYICILAR.get(self.sp_saglayici.text, c.SAGLAYICILAR["Gmail"])
-        ayar = c._hesap_normalize({"eposta": eposta, "sifre": sifre,
-                                   "smtp_host": bilgi["smtp_host"], "smtp_port": bilgi["smtp_port"],
-                                   "imap_host": bilgi["imap_host"], "imap_port": bilgi["imap_port"]})
+        aktif = self.ayar
+        # Microsoft (şifresiz) hesabı: aktif hesabın refresh_token'ıyla test et.
+        if aktif.get("refresh_token") and (not self.ti_eposta.text.strip()
+                or eposta.lower() == aktif.get("eposta", "").lower()):
+            ayar = dict(aktif)
+        else:
+            if not eposta or not sifre:
+                self.uyari("Eksik", "E-posta ve şifre gerekli.")
+                return
+            bilgi = c.SAGLAYICILAR.get(self.sp_saglayici.text, c.SAGLAYICILAR["Gmail"])
+            ayar = c._hesap_normalize({"eposta": eposta, "sifre": sifre,
+                                       "smtp_host": bilgi["smtp_host"], "smtp_port": bilgi["smtp_port"],
+                                       "imap_host": bilgi["imap_host"], "imap_port": bilgi["imap_port"]})
         self._durum("Test ediliyor…")
 
         def test():

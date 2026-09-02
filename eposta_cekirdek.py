@@ -10,10 +10,14 @@ Yalnız Python standart kütüphanesi kullanılır.
 import os
 import re
 import json
+import time
 import base64
 import smtplib
 import imaplib
 import email
+import urllib.request
+import urllib.parse
+import urllib.error
 from email.header import decode_header, make_header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -134,7 +138,8 @@ def yapilandirma_kaydet(cfg):
            "imza": cfg.get("imza", ""), "imza_logo": cfg.get("imza_logo", ""),
            "haber_gorulen": cfg.get("haber_gorulen", {})}
     for h in cfg.get("hesaplar", []):
-        hh = dict(h)
+        # Geçici token önbelleğini (_at/_at_bitis) yazma; refresh_token kalır.
+        hh = {k: v for k, v in h.items() if not k.startswith("_")}
         hh["sifre"] = base64.b64encode((h.get("sifre") or "").encode("utf-8")).decode("utf-8")
         out["hesaplar"].append(hh)
     with open(AYAR_DOSYASI, "w", encoding="utf-8") as f:
@@ -156,6 +161,11 @@ def _coz(metin):
 
 def eposta_adresi(metin):
     return (parseaddr(metin or "")[1] or "").strip().lower()
+
+
+def kimlik_var(ayar):
+    """Hesap bağlanmaya hazır mı: e-posta + (şifre YA DA Microsoft anahtarı)."""
+    return bool(ayar.get("eposta") and (ayar.get("sifre") or ayar.get("refresh_token")))
 
 
 def tarih_bicim(s):
@@ -261,6 +271,90 @@ def _govde_coz(parca):
 
 
 # ---------------------------------------------------------------------------
+# Microsoft OAuth2 (Outlook/Hotmail: basic auth kapalı, şifre çalışmaz)
+# Telefonda CİHAZ KODU akışı: kullanıcı microsoft.com/device adresine kodu
+# girip giriş yapar; uygulama token gelene kadar bekler. Loopback/redirect YOK.
+# ---------------------------------------------------------------------------
+MS_CLIENT_ID = "9e5f94bc-e8a4-4e73-b8be-63364c29d753"   # Thunderbird (kamuya açık public client)
+MS_AUTORITE = "https://login.microsoftonline.com/common/oauth2/v2.0"
+MS_SCOPE = ("offline_access https://outlook.office.com/IMAP.AccessAsUser.All "
+            "https://outlook.office.com/SMTP.Send")
+
+
+def _http_post(url, veri):
+    data = urllib.parse.urlencode(veri).encode()
+    req = urllib.request.Request(url, data=data,
+                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return r.status, json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode())
+        except Exception:
+            return e.code, {}
+
+
+def ms_cihaz_kodu():
+    """Cihaz kodu akışını başlatır → {user_code, verification_uri, device_code, interval}."""
+    _, veri = _http_post(MS_AUTORITE + "/devicecode",
+                         {"client_id": MS_CLIENT_ID, "scope": MS_SCOPE})
+    if "device_code" not in veri:
+        raise RuntimeError(veri.get("error_description", "Microsoft giriş kodu alınamadı."))
+    return veri
+
+
+def ms_token_bekle(device_code, interval=5, expires_in=900, iptal=None):
+    """Kullanıcı microsoft.com/device'de onaylayana kadar bekler; token sözlüğü döndürür."""
+    son = time.time() + int(expires_in or 900)
+    bekle = max(2, int(interval or 5))
+    while time.time() < son:
+        if iptal is not None and iptal():
+            raise RuntimeError("İptal edildi.")
+        time.sleep(bekle)
+        _, veri = _http_post(MS_AUTORITE + "/token",
+                             {"client_id": MS_CLIENT_ID, "grant_type": "device_code",
+                              "device_code": device_code})
+        if "access_token" in veri:
+            return veri
+        hata = veri.get("error", "")
+        if hata == "authorization_pending":
+            continue
+        if hata == "slow_down":
+            bekle += 5
+            continue
+        raise RuntimeError(veri.get("error_description", hata or "Giriş başarısız."))
+    raise RuntimeError("Süre doldu, tekrar dene.")
+
+
+def ms_token_yenile(refresh_token):
+    _, veri = _http_post(MS_AUTORITE + "/token",
+                         {"client_id": MS_CLIENT_ID, "grant_type": "refresh_token",
+                          "scope": MS_SCOPE, "refresh_token": refresh_token})
+    if "access_token" not in veri:
+        raise RuntimeError(veri.get("error_description",
+                                    "Microsoft oturumu yenilenemedi (tekrar giriş gerek)."))
+    return veri
+
+
+def ms_erisim_tokeni(ayar):
+    """Hesabın refresh_token'ından taze access_token üretir (kısa süre önbellek)."""
+    simdi = time.time()
+    if ayar.get("_at") and ayar.get("_at_bitis", 0) > simdi + 60:
+        return ayar["_at"]
+    veri = ms_token_yenile(ayar["refresh_token"])
+    ayar["_at"] = veri["access_token"]
+    ayar["_at_bitis"] = simdi + int(veri.get("expires_in", 3600))
+    if veri.get("refresh_token"):
+        ayar["refresh_token"] = veri["refresh_token"]
+    return ayar["_at"]
+
+
+def _xoauth2(eposta, token):
+    return "user=%s\1auth=Bearer %s\1\1" % (eposta, token)
+
+
+# ---------------------------------------------------------------------------
 # Gönderme
 # ---------------------------------------------------------------------------
 
@@ -330,7 +424,17 @@ def eposta_gonder(ayar, kime, cc, bcc, konu, govde, ekler, imza_metin="", imza_l
         sunucu = smtplib.SMTP(host, port, timeout=30)
         sunucu.ehlo(); sunucu.starttls(); sunucu.ehlo()
     try:
-        sunucu.login(ayar["eposta"], ayar["sifre"])
+        if ayar.get("refresh_token"):                   # Microsoft OAuth
+            token = ms_erisim_tokeni(ayar)
+            sunucu.ehlo()
+            kod = base64.b64encode(_xoauth2(ayar["eposta"], token).encode()).decode()
+            typ, resp = sunucu.docmd("AUTH", "XOAUTH2 " + kod)
+            if typ == 334:
+                typ, resp = sunucu.docmd("")            # hata challenge'ını bitir
+            if typ != 235:
+                raise smtplib.SMTPAuthenticationError(typ, resp)
+        else:
+            sunucu.login(ayar["eposta"], ayar["sifre"])
         sunucu.sendmail(gonderen, alicilar, msg.as_string())
     finally:
         try:
@@ -345,7 +449,11 @@ def eposta_gonder(ayar, kime, cc, bcc, konu, govde, ekler, imza_metin="", imza_l
 
 def imap_baglan(ayar):
     M = imaplib.IMAP4_SSL(ayar["imap_host"], int(ayar["imap_port"]))
-    M.login(ayar["eposta"], ayar["sifre"])
+    if ayar.get("refresh_token"):                       # Microsoft OAuth
+        token = ms_erisim_tokeni(ayar)
+        M.authenticate("XOAUTH2", lambda _: _xoauth2(ayar["eposta"], token).encode())
+    else:
+        M.login(ayar["eposta"], ayar["sifre"])
     return M
 
 
