@@ -34,11 +34,13 @@ jobs:
           echo "JAVA_HOME=$JH" >> "$GITHUB_ENV"
           echo "$JH/bin" >> "$GITHUB_PATH"
 
-      # KARARLI surumler: p4a 2024.1.21 -> Python 3.11 derler (3.14 patlamasi biter)
-      - name: Buildozer + python-for-android (kararli)
+      # KARARLI buildozer. p4a surumu ARTIK buildozer.spec'teki p4a.branch ile
+      # kilitleniyor (v2024.01.21 -> Python 3.11.5). pip ile p4a pinlemek ISE
+      # YARAMAZ: buildozer p4a'yi kendisi git'ten kloniyor.
+      - name: Buildozer (kararli)
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "cython==0.29.36" "buildozer==1.5.0" "python-for-android==2024.1.21" virtualenv
+          python -m pip install "cython==0.29.36" "buildozer==1.5.0" virtualenv
           buildozer --version
 
       - name: Onbellegi geri yukle
@@ -49,9 +51,15 @@ jobs:
             .buildozer
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: buildozer-${{ runner.os }}-${{ github.run_number }}
+          key: buildozer2-${{ runner.os }}-${{ github.run_number }}
           restore-keys: |
-            buildozer-${{ runner.os }}-
+            buildozer2-${{ runner.os }}-
+
+      # Onbellekten gelmis olabilecek ESKI p4a klonunu (master/3.14) sil ki
+      # buildozer p4a.branch = v2024.01.21'i TAZE klonlasin. Agir indirmeler
+      # (~/.buildozer, gradle) korunur, sadece p4a checkout'u yenilenir.
+      - name: Eski p4a klonunu temizle
+        run: rm -rf .buildozer/android/platform/python-for-android
 
       - name: APK derle
         run: buildozer -v android debug
@@ -65,7 +73,7 @@ jobs:
             .buildozer
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: buildozer-${{ runner.os }}-${{ github.run_number }}
+          key: buildozer2-${{ runner.os }}-${{ github.run_number }}
 
       - name: APK yukle (artifact)
         uses: actions/upload-artifact@v4
