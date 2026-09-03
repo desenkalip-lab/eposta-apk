@@ -257,10 +257,10 @@ class EpostaApp(App):
         # yeni: [(m, mhim, mkey), ...]
         if not yeni:
             return
-        baslik = f"🔔 {len(yeni)} önemli mesaj"
+        baslik = f"{len(yeni)} önemli mesaj"
         satir = []
         for m, mhim, mkey in yeni[:4]:
-            satir.append(f"{'⭐' if mhim else ''}{'🔔' if mkey else ''} {m.get('from','')[:30]} — {m.get('subject','')[:30]}")
+            satir.append(f"{m.get('from','')[:30]} — {m.get('subject','')[:30]}")
         mesaj = "\n".join(satir)
         if _plyer_notif is not None:
             try:
@@ -288,20 +288,20 @@ class EpostaApp(App):
             r = Rectangle(pos=bar.pos, size=bar.size)
         bar.bind(pos=lambda *a: setattr(r, "pos", bar.pos),
                  size=lambda *a: setattr(r, "size", bar.size))
-        bar.add_widget(Label(text="✉", font_size="22sp", size_hint_x=None, width=dp(30)))
+        bar.add_widget(Label(text="", size_hint_x=None, width=dp(4)))
         self.sp_hesap = Spinner(text="hesap", values=[], size_hint_x=1,
                                 background_normal="", background_color=PRIMARY_D,
                                 color=(1, 1, 1, 1), font_size="14sp")
         self.sp_hesap.bind(text=self._hesap_secildi)
         bar.add_widget(self.sp_hesap)
-        yb = duz_dugme("⟳", PRIMARY_D, boy=42, size_hint_x=None, width=dp(46), font_size="20sp")
+        yb = duz_dugme("Yenile", PRIMARY_D, boy=42, size_hint_x=None, width=dp(74), font_size="13sp")
         yb.bind(on_release=lambda *a: self.yenile())
         bar.add_widget(yb)
         return bar
 
     def _alt_bar(self):
         bar = BoxLayout(size_hint_y=None, height=dp(52), spacing=dp(2))
-        for etiket, ekran in (("📥 Gelen", "liste"), ("✉ Gönder", "gonder"), ("⚙ Ayarlar", "ayarlar")):
+        for etiket, ekran in (("Gelen", "liste"), ("Gönder", "gonder"), ("Ayarlar", "ayarlar")):
             b = duz_dugme(etiket, (0.12, 0.16, 0.22, 1), boy=52)
             b.bind(on_release=lambda w, e=ekran: self._alt_git(e))
             bar.add_widget(b)
@@ -348,7 +348,7 @@ class EpostaApp(App):
                               color=TEXT, font_size="14sp")
         self.sp_rol.bind(text=self._rol_secildi)
         ust.add_widget(self.sp_rol)
-        self.btn_cop = duz_dugme("🧹 Çöpü Boşalt", (0.882, 0.114, 0.282, 1), boy=40,
+        self.btn_cop = duz_dugme("Çöpü Boşalt", (0.882, 0.114, 0.282, 1), boy=40,
                                  size_hint_x=None, width=dp(130), font_size="12sp", opacity=0)
         self.btn_cop.bind(on_release=lambda *a: self._cop_bosalt())
         self.btn_cop.disabled = True
@@ -430,7 +430,7 @@ class EpostaApp(App):
                     continue
             mhim = adr in onemli
             mkey = c.anahtar_eslesme(m, self.cfg.get("anahtarlar", []))
-            im = ("⭐" if mhim else "") + ("🔔" if mkey else "")
+            im = "•" if (mhim or mkey) else ""
             self.liste_grid.add_widget(self._mesaj_satir(rol, m, kisi_ham, im))
             gosterilen += 1
             if rol == "inbox" and (mhim or mkey) and m["uid"] not in self._haber_gorulen:
@@ -488,17 +488,17 @@ class EpostaApp(App):
         ek = Screen(name="mesaj")
         dis = BoxLayout(orientation="vertical")
         ub = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(4), padding=(dp(6), dp(4)))
-        gb = duz_dugme("‹ Geri", (0.9, 0.91, 0.95, 1), TEXT, boy=40, size_hint_x=None, width=dp(80))
+        gb = duz_dugme("Geri", (0.9, 0.91, 0.95, 1), TEXT, boy=40, size_hint_x=None, width=dp(80))
         gb.bind(on_release=lambda *a: self.git("liste"))
         ub.add_widget(gb)
-        yb = duz_dugme("↩ Yanıtla", PRIMARY, boy=40)
+        yb = duz_dugme("Yanıtla", PRIMARY, boy=40)
         yb.bind(on_release=lambda *a: self._yanitla(False))
         ub.add_widget(yb)
-        mb = duz_dugme("⋮", (0.9, 0.91, 0.95, 1), TEXT, boy=40, size_hint_x=None, width=dp(48),
+        mb = duz_dugme("İşlem", (0.9, 0.91, 0.95, 1), TEXT, boy=40, size_hint_x=None, width=dp(66),
                        font_size="20sp")
         mb.bind(on_release=lambda *a: self._mesaj_islemler())
         ub.add_widget(mb)
-        sb = duz_dugme("🗑", (0.882, 0.114, 0.282, 1), boy=40, size_hint_x=None, width=dp(56),
+        sb = duz_dugme("Sil", (0.882, 0.114, 0.282, 1), boy=40, size_hint_x=None, width=dp(56),
                        font_size="18sp")
         sb.bind(on_release=lambda *a: self._mesaj_sil())
         ub.add_widget(sb)
@@ -534,7 +534,7 @@ class EpostaApp(App):
         self.mesaj_grid.add_widget(self._etiket(meta, MUTED, "12sp"))
         # ekler
         if m["ekler"]:
-            self.mesaj_grid.add_widget(self._etiket("📎 Ekler:", MUTED, "13sp", bold=True))
+            self.mesaj_grid.add_widget(self._etiket("Ekler:", MUTED, "13sp", bold=True))
             for ad, veri in m["ekler"]:
                 b = duz_dugme("📄 " + self._kisalt(ad, 40), (0.93, 0.95, 1, 1), LINK, boy=42)
                 b.bind(on_release=lambda w, a=ad, v=veri: self._ek_ac(a, v))
@@ -658,10 +658,10 @@ class EpostaApp(App):
         onemli = adr in self.cfg.get("onemli", [])
         engelli = adr in self.cfg.get("engelli", [])
         secenekler = [
-            ("↩↩ Tümünü Yanıtla", lambda: self._yanitla(True)),
-            ("☆ Önemliden çıkar" if onemli else "⭐ Önemli kişi yap", lambda: self._onemli_toggle(adr)),
-            ("✅ Engeli kaldır" if engelli else "🚫 Engelle", lambda: self._engel_toggle(adr)),
-            ("📇 Deftere Kaydet", lambda: self._deftere_kaydet(m)),
+            ("Tümünü Yanıtla", lambda: self._yanitla(True)),
+            ("Önemliden çıkar" if onemli else "Önemli kişi yap", lambda: self._onemli_toggle(adr)),
+            ("Engeli kaldır" if engelli else "Engelle", lambda: self._engel_toggle(adr)),
+            ("Deftere Kaydet", lambda: self._deftere_kaydet(m)),
         ]
         self.secim_popup("İşlemler", secenekler)
 
@@ -715,10 +715,10 @@ class EpostaApp(App):
         g.add_widget(self.ti_govde)
 
         arac = BoxLayout(size_hint_y=None, height=dp(46), spacing=dp(6))
-        eb = duz_dugme("📎 Ek Ekle", (0.9, 0.91, 0.95, 1), TEXT, boy=46)
+        eb = duz_dugme("Ek Ekle", (0.9, 0.91, 0.95, 1), TEXT, boy=46)
         eb.bind(on_release=lambda *a: self._ek_dosya_ekle())
         arac.add_widget(eb)
-        db = duz_dugme("📇 Defter", (0.9, 0.91, 0.95, 1), TEXT, boy=46)
+        db = duz_dugme("Defter", (0.9, 0.91, 0.95, 1), TEXT, boy=46)
         db.bind(on_release=lambda *a: self._defter_sec_compose())
         arac.add_widget(db)
         g.add_widget(arac)
@@ -759,7 +759,7 @@ class EpostaApp(App):
             self.lbl_ekler.text = ""
         else:
             adlar = ", ".join(os.path.basename(y) for y in self._compose_ekler)
-            self.lbl_ekler.text = "📎 " + adlar
+            self.lbl_ekler.text = adlar
 
     def _ek_dosya_ekle(self):
         if _plyer_files is None:
@@ -847,13 +847,13 @@ class EpostaApp(App):
         g.add_widget(self.ti_eposta)
         self.ti_sifre = self._giris("Şifre / Uygulama Şifresi", parola=True)
         g.add_widget(self.ti_sifre)
-        yardim = duz_dugme("🔑 Uygulama Şifresi Al", (0.93, 0.95, 1, 1), LINK, boy=44)
+        yardim = duz_dugme("Uygulama Şifresi Al", (0.93, 0.95, 1, 1), LINK, boy=44)
         yardim.bind(on_release=lambda *a: self._uyg_sifre())
         g.add_widget(yardim)
         g.add_widget(self._etiket("Gmail/Hotmail'de NORMAL şifre çalışmaz; uygulama şifresi gerekir.",
                                   MUTED, "11sp"))
         # Hotmail/Outlook: Microsoft basic auth'u kapattı → şifresiz OAuth girişi.
-        msb = duz_dugme("🔐 Microsoft ile Giriş (Hotmail)", PRIMARY_D, boy=46)
+        msb = duz_dugme("Microsoft ile Giriş (Hotmail)", PRIMARY_D, boy=46)
         msb.bind(on_release=lambda *a: self._ms_giris())
         g.add_widget(msb)
         g.add_widget(self._etiket("Hotmail/Outlook için şifre yerine bunu kullan: "
@@ -861,10 +861,10 @@ class EpostaApp(App):
                                   "microsoft.com/device'de gir.", MUTED, "11sp"))
 
         satir = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(6))
-        kb = duz_dugme("💾 Kaydet", PRIMARY)
+        kb = duz_dugme("Kaydet", PRIMARY)
         kb.bind(on_release=lambda *a: self._hesap_kaydet())
         satir.add_widget(kb)
-        tb = duz_dugme("🔌 Test", (0.9, 0.91, 0.95, 1), TEXT)
+        tb = duz_dugme("Test", (0.9, 0.91, 0.95, 1), TEXT)
         tb.bind(on_release=lambda *a: self._baglanti_test())
         satir.add_widget(tb)
         g.add_widget(satir)
@@ -886,10 +886,10 @@ class EpostaApp(App):
 
         # Listeler (engelli / önemli / anahtar) + adres defteri
         self.liste_kutulari = {}
-        for anahtar, baslik in (("onemli", "⭐ Önemli Kişiler"),
-                                ("engelli", "🚫 Engelli Kişiler"),
-                                ("anahtarlar", "🔔 Anahtar Kelimeler"),
-                                ("defter", "📇 Adres Defteri")):
+        for anahtar, baslik in (("onemli", "Önemli Kişiler"),
+                                ("engelli", "Engelli Kişiler"),
+                                ("anahtarlar", "Anahtar Kelimeler"),
+                                ("defter", "Adres Defteri")):
             g.add_widget(self._etiket(baslik, MUTED, "13sp", bold=True))
             eb = duz_dugme("+ Ekle", (0.9, 0.91, 0.95, 1), TEXT, boy=40)
             eb.bind(on_release=lambda w, a=anahtar: self._genel_ekle(a))
@@ -916,7 +916,7 @@ class EpostaApp(App):
                     deger = oge
                 satir = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(4))
                 satir.add_widget(self._etiket(metin, TEXT, "12sp"))
-                sb = duz_dugme("✕", (0.882, 0.114, 0.282, 1), boy=40, size_hint_x=None,
+                sb = duz_dugme("X", (0.882, 0.114, 0.282, 1), boy=40, size_hint_x=None,
                                width=dp(44))
                 sb.bind(on_release=lambda w, a=anahtar, d=deger: self._genel_sil(a, d))
                 satir.add_widget(sb)
@@ -985,7 +985,7 @@ class EpostaApp(App):
         self.ti_eposta.text = ""
         self.ti_sifre.text = ""
         self._durum("Hesap kaydedildi.")
-        self.uyari("Tamam", "Hesap kaydedildi. Test etmek için 🔌 Test'e bas.")
+        self.uyari("Tamam", "Hesap kaydedildi. Test etmek için Test'e bas.")
 
     # ---- Microsoft (Hotmail/Outlook) şifresiz giriş: cihaz kodu akışı ----
     def _panoya(self, metin):
@@ -1021,10 +1021,10 @@ class EpostaApp(App):
                     size_hint=(0.92, 0.6), auto_dismiss=False)
         self._ms_pop = pop
         satir = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(8))
-        ab = duz_dugme("🌐 Aç", PRIMARY)
+        ab = duz_dugme("Aç", PRIMARY)
         ab.bind(on_release=lambda *a: self.url_ac(uri))
         satir.add_widget(ab)
-        cb = duz_dugme("📋 Kodu Kopyala", (0.9, 0.91, 0.95, 1), TEXT)
+        cb = duz_dugme("Kodu Kopyala", (0.9, 0.91, 0.95, 1), TEXT)
         cb.bind(on_release=lambda *a: self._panoya(kod))
         satir.add_widget(cb)
         icerik.add_widget(satir)
@@ -1073,7 +1073,7 @@ class EpostaApp(App):
         self.ti_eposta.text = ""
         self.ti_sifre.text = ""
         self._durum("Microsoft girişi tamam.")
-        self.uyari("Tamam", "Hotmail hesabın eklendi. 📥 Gelen'e geçip Yenile'ye bas.")
+        self.uyari("Tamam", "Hotmail hesabın eklendi. Gelen'e geçip Yenile'ye bas.")
 
     def _ms_hata(self, msg):
         try:
