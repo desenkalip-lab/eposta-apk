@@ -31,12 +31,56 @@ from kivy.uix.spinner import Spinner
 from kivy.uix.screenmanager import ScreenManager, Screen, SlideTransition
 from kivy.uix.popup import Popup
 from kivy.uix.switch import Switch
+from kivy.base import ExceptionHandler, ExceptionManager
 try:
     from kivy.core.clipboard import Clipboard   # Android'de sağlayıcı patlarsa uygulama açılmasın diye korumalı
 except Exception:
     Clipboard = None
 
 import eposta_cekirdek as c
+
+
+def _hata_dosyaya_yaz(iz):
+    """Hata izini bulunabilecek yerlere yazmayı dener (Android + ev dizini)."""
+    yerler = []
+    try:
+        from jnius import autoclass
+        Env = autoclass("android.os.Environment")
+        try:
+            yerler.append(os.path.join(
+                Env.getExternalStorageDirectory().getAbsolutePath(), "eposta_hata.txt"))
+        except Exception:
+            pass
+        try:
+            yerler.append(os.path.join(Env.getExternalStoragePublicDirectory(
+                Env.DIRECTORY_DOWNLOADS).getAbsolutePath(), "eposta_hata.txt"))
+        except Exception:
+            pass
+    except Exception:
+        pass
+    yerler.append(os.path.join(os.path.expanduser("~"), "eposta_hata.txt"))
+    for y in yerler:
+        try:
+            with open(y, "w", encoding="utf-8") as f:
+                f.write(iz)
+        except Exception:
+            pass
+
+
+class _CalismaHatasiYakala(ExceptionHandler):
+    """Açılış/olay-döngüsü hatalarını yakalar: uygulamayı KAPATMAZ, hatayı
+    canlı pencerede gösterir. Telefonda logcat okumak zor olduğu için şart."""
+    def handle_exception(self, inst):
+        import traceback
+        iz = traceback.format_exc()
+        _hata_dosyaya_yaz(iz)
+        try:
+            app = App.get_running_app()
+            if app is not None:
+                app._hatayi_ekranda_goster(iz)
+        except Exception:
+            pass
+        return ExceptionManager.PASS
 
 PRIMARY = (0.31, 0.275, 0.898, 1)      # #4f46e5
 PRIMARY_D = (0.263, 0.22, 0.792, 1)    # #4338ca
@@ -78,6 +122,11 @@ class EpostaApp(App):
     def build(self):
         # Açılışta herhangi bir şey patlarsa uygulama sessizce kapanmasın;
         # hatayı EKRANDA göster (telefonda logcat okumak zor).
+        # Olay-döngüsü (Clock, dokunma) hatalarını da yakala:
+        try:
+            ExceptionManager.add_handler(_CalismaHatasiYakala())
+        except Exception:
+            pass
         try:
             return self._build_ic()
         except Exception:
@@ -97,6 +146,34 @@ class EpostaApp(App):
                      texture_size=lambda w, v: setattr(lbl, "height", lbl.texture_size[1]))
             sv.add_widget(lbl)
             return sv
+
+    def _hatayi_ekranda_goster(self, iz):
+        """Olay-döngüsü hatasını canlı pencerede, kapanmadan gösterir (bir kez)."""
+        if getattr(self, "_hata_pop_acik", False):
+            return
+        self._hata_pop_acik = True
+        try:
+            icerik = BoxLayout(orientation="vertical", padding=dp(8), spacing=dp(6))
+            sv = ScrollView()
+            lbl = Label(text="ÇALIŞMA HATASI (fotoğrafını çek):\n\n" + iz,
+                        color=(0.85, 0.1, 0.1, 1), font_size="12sp",
+                        halign="left", valign="top", size_hint_y=None)
+            lbl.bind(width=lambda w, v: setattr(lbl, "text_size", (lbl.width - dp(16), None)),
+                     texture_size=lambda w, v: setattr(lbl, "height", lbl.texture_size[1]))
+            sv.add_widget(lbl)
+            icerik.add_widget(sv)
+            pop = Popup(title="Hata", content=icerik, size_hint=(0.97, 0.95),
+                        auto_dismiss=False)
+            kapat = duz_dugme("Kapat", PRIMARY, boy=46)
+
+            def _kapat(*a):
+                self._hata_pop_acik = False
+                pop.dismiss()
+            kapat.bind(on_release=_kapat)
+            icerik.add_widget(kapat)
+            pop.open()
+        except Exception:
+            self._hata_pop_acik = False
 
     def _build_ic(self):
         self.title = "E-Posta Aracı"
