@@ -13,7 +13,7 @@ version = 1.0
 android.numeric_version = 1
 
 # Bagimliliklar (Favori Mesaj'in CALISAN tarifiyle ayni)
-requirements = python3,kivy==2.3.1,pyjnius,plyer,android,openssl,certifi
+requirements = python3,kivy==2.3.1,pyjnius,plyer,android,openssl,certifi,filetype
 
 # KRITIK: p4a'yi 3.11 KULLANAN karali surume SABITLE. Bos birakilirsa buildozer
 # p4a master'i kloniyor; master artik CPython 3.14.2 cekiyor ve host venv'in pip'i
