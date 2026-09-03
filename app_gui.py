@@ -200,6 +200,7 @@ class EpostaApp(App):
 
         self._hesap_spinner_guncelle()
         Clock.schedule_once(lambda dt: self._acilis(), 0.3)
+        Clock.schedule_once(lambda dt: self._bildirim_izni_iste(), 1.2)
         return kok
 
     # ---- durum ----
@@ -269,6 +270,14 @@ class EpostaApp(App):
                 pass
         # yedek: uygulama içi kısa uyarı
         self.uyari(baslik, mesaj)
+
+    def _bildirim_izni_iste(self):
+        """Android 13+ (API 33+): bildirim gösterebilmek için izin ister."""
+        try:
+            from android.permissions import request_permissions
+            request_permissions(["android.permission.POST_NOTIFICATIONS"])
+        except Exception:
+            pass
 
     # ---- üst bar ----
     def _ust_bar(self):

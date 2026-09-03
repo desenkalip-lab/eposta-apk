@@ -30,7 +30,7 @@ orientation = portrait
 fullscreen = 0
 
 # Android izinleri: internet SART (mail icin)
-android.permissions = INTERNET,ACCESS_NETWORK_STATE
+android.permissions = INTERNET,ACCESS_NETWORK_STATE,POST_NOTIFICATIONS,VIBRATE
 
 # SDK lisansini otomatik kabul et (CI'da elle onay yok)
 android.accept_sdk_license = True
