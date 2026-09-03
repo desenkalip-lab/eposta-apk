@@ -7,6 +7,13 @@ olsun uygulama sessizce kapanmasın; tam hatayı EKRANDA göstersin (telefonda
 logcat okumak zor) ve mümkünse bir dosyaya yazsın. Böylece kullanıcı ekranın
 fotoğrafını çekip bize gönderebilir.
 """
+import os
+# Android 14 (API 34): SDL2'nin HIDAPI (oyun kolu) parçası, bir BroadcastReceiver'ı
+# RECEIVER_EXPORTED/NOT_EXPORTED bayrağı olmadan kaydettiği için açılışta patlıyor
+# ve uygulama siyah ekranda takılıyor. E-posta uygulamasının oyun koluna ihtiyacı
+# yok → HIDAPI'yi Kivy/SDL yüklenmeden ÖNCE kapat.
+os.environ.setdefault("SDL_JOYSTICK_HIDAPI", "0")
+
 import traceback
 
 
