@@ -14,6 +14,16 @@ import os
 # yok → HIDAPI'yi Kivy/SDL yüklenmeden ÖNCE kapat.
 os.environ.setdefault("SDL_JOYSTICK_HIDAPI", "0")
 
+# Bazı Android GPU'larında (ör. Mali) Kivy, pencere/GL bağlamı oluştururken
+# çok-örnekleme (MSAA) yapılandırmasını eşleştiremeyip "Window: Provider: sdl2"
+# adımında SİYAH EKRANDA TAKILIYOR. multisamples=0 bu takılmayı giderir.
+# Pencere oluşmadan (app_gui import'undan) ÖNCE ayarlanmalı.
+try:
+    from kivy.config import Config
+    Config.set("graphics", "multisamples", "0")
+except Exception:
+    pass
+
 import traceback
 
 
