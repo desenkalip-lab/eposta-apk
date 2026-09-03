@@ -444,23 +444,25 @@ class EpostaApp(App):
         satir.bind(pos=lambda *a: setattr(r, "pos", satir.pos),
                    size=lambda *a: setattr(r, "size", satir.size))
         ust = f"{im} {kisi}".strip()
-        # shorten=True + text_size=(genişlik, yükseklik): metin TEK SATIRA sığdırılır,
-        # taşmaz (uzun adresler alt satıra sarıp örtüşmez).
+        # ÜST SATIR: gönderen (sol, kısaltmalı) + tarih (sağ, sabit genişlik).
+        # shorten=True + text_size=(genişlik, yükseklik) → metin TEK SATIRA sığdırılır,
+        # taşmaz/sarmaz. Tarih tam sığsın diye 100dp.
+        ust_box = BoxLayout(size_hint_y=None, height=dp(24), spacing=dp(6))
         l1 = Label(text=ust, color=TEXT, font_size="14sp", bold=True,
-                   halign="left", valign="middle", size_hint_y=None, height=dp(24),
-                   shorten=True, shorten_from="right")
+                   halign="left", valign="middle", shorten=True, shorten_from="right")
         l1.bind(size=lambda w, s: setattr(l1, "text_size", (l1.width, l1.height)))
-        alt = BoxLayout(size_hint_y=None, height=dp(20), spacing=dp(6))
-        konu = Label(text=m.get("subject", ""), color=MUTED, font_size="12sp",
-                     halign="left", valign="middle", shorten=True, shorten_from="right")
-        konu.bind(size=lambda w, s: setattr(konu, "text_size", (konu.width, konu.height)))
         tar = Label(text=c.tarih_bicim(m["date"]), color=MUTED, font_size="12sp",
-                    halign="right", valign="middle", size_hint_x=None, width=dp(86))
+                    halign="right", valign="middle", size_hint_x=None, width=dp(100))
         tar.bind(size=lambda w, s: setattr(tar, "text_size", (tar.width, tar.height)))
-        alt.add_widget(konu)
-        alt.add_widget(tar)
-        satir.add_widget(l1)
-        satir.add_widget(alt)
+        ust_box.add_widget(l1)
+        ust_box.add_widget(tar)
+        # ALT SATIR: konu (tam genişlik, kısaltmalı).
+        konu = Label(text=m.get("subject", ""), color=MUTED, font_size="12sp",
+                     halign="left", valign="middle", size_hint_y=None, height=dp(20),
+                     shorten=True, shorten_from="right")
+        konu.bind(size=lambda w, s: setattr(konu, "text_size", (konu.width, konu.height)))
+        satir.add_widget(ust_box)
+        satir.add_widget(konu)
         fl.add_widget(satir)
         btn = Button(background_normal="", background_color=(0, 0, 0, 0),
                      size_hint=(1, 1), pos_hint={"x": 0, "y": 0})
