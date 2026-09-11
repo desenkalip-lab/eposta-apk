@@ -578,6 +578,16 @@ class EpostaApp(App):
                 self.uyari("Bağlantı", f"Açılamadı: {e}")
 
     def _ek_ac(self, ad, veri):
+        # Eke tıklanınca DOĞRUDAN açma; önce "Aç mı / İndir mi?" diye sor.
+        if not veri:
+            self.uyari("Ek", "Ek içeriği boş.")
+            return
+        self.secim_popup(ad, [
+            ("Aç", lambda: self._ek_gercek_ac(ad, veri)),
+            ("İndir (Kaydet)", lambda: self._ek_indir(ad, veri)),
+        ])
+
+    def _ek_gercek_ac(self, ad, veri):
         guvenli = "".join(ch if ch not in '<>:"/\\|?*\n\r\t' else "_" for ch in ad).strip(" .") or "ek"
         try:
             klasor = os.path.join(self.user_data_dir, "ekler")
@@ -588,7 +598,6 @@ class EpostaApp(App):
         except Exception as e:
             self.uyari("Ek", f"Kaydedilemedi: {e}")
             return
-        # açmayı dene
         try:
             if hasattr(os, "startfile"):
                 os.startfile(yol)          # Windows (test)
@@ -596,9 +605,8 @@ class EpostaApp(App):
         except Exception:
             pass
         try:
-            from jnius import autoclass, cast
+            from jnius import autoclass
             Intent = autoclass('android.content.Intent')
-            Uri = autoclass('android.net.Uri')
             File = autoclass('java.io.File')
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
             FileProvider = autoclass('androidx.core.content.FileProvider')
@@ -611,6 +619,57 @@ class EpostaApp(App):
             ctx.startActivity(intent)
         except Exception as e:
             self.uyari("Ek", f"Kaydedildi:\n{yol}\n\n(Otomatik açılamadı: {e})")
+
+    def _ek_indir(self, ad, veri):
+        """Eki telefonun İndirilenler klasörüne kaydeder (MediaStore)."""
+        guvenli = "".join(ch if ch not in '<>:"/\\|?*\n\r\t' else "_" for ch in ad).strip(" .") or "ek"
+        if hasattr(os, "startfile"):        # Windows testi: ev/Downloads
+            try:
+                yol = os.path.join(os.path.expanduser("~"), "Downloads", guvenli)
+                os.makedirs(os.path.dirname(yol), exist_ok=True)
+                with open(yol, "wb") as f:
+                    f.write(veri)
+                self.uyari("İndirildi", f"Kaydedildi:\n{yol}")
+            except Exception as e:
+                self.uyari("Ek", f"İndirilemedi: {e}")
+            return
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            ctx = PythonActivity.mActivity
+            VERSION = autoclass('android.os.Build$VERSION')
+            if VERSION.SDK_INT >= 29:       # Android 10+: MediaStore İndirilenler
+                ContentValues = autoclass('android.content.ContentValues')
+                Downloads = autoclass('android.provider.MediaStore$Downloads')
+                values = ContentValues()
+                values.put("_display_name", guvenli)
+                values.put("mime_type", "application/octet-stream")
+                values.put("relative_path", "Download")
+                resolver = ctx.getContentResolver()
+                uri = resolver.insert(Downloads.EXTERNAL_CONTENT_URI, values)
+                out = resolver.openOutputStream(uri)
+                out.write(veri)
+                out.flush()
+                out.close()
+                self.uyari("İndirildi", f"İndirilenler klasörüne kaydedildi:\n{guvenli}")
+            else:
+                Environment = autoclass('android.os.Environment')
+                d = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS).getAbsolutePath()
+                yol = os.path.join(d, guvenli)
+                with open(yol, "wb") as f:
+                    f.write(veri)
+                self.uyari("İndirildi", f"Kaydedildi:\n{yol}")
+        except Exception as e:
+            try:                            # yedek: uygulama klasörü
+                klasor = os.path.join(self.user_data_dir, "indirilenler")
+                os.makedirs(klasor, exist_ok=True)
+                yol = os.path.join(klasor, guvenli)
+                with open(yol, "wb") as f:
+                    f.write(veri)
+                self.uyari("İndirildi", f"Kaydedildi:\n{yol}\n(İndirilenler'e yazılamadı: {e})")
+            except Exception as e2:
+                self.uyari("Ek", f"İndirilemedi: {e2}")
 
     def _mesaj_sil(self):
         if not self._sec_uid:
