@@ -51,6 +51,7 @@ jobs:
             .buildozer
             ~/.gradle/caches
             ~/.gradle/wrapper
+            ~/.android
           key: buildozer2-${{ runner.os }}-${{ github.run_number }}
           restore-keys: |
             buildozer2-${{ runner.os }}-
@@ -78,6 +79,7 @@ jobs:
             .buildozer
             ~/.gradle/caches
             ~/.gradle/wrapper
+            ~/.android
           key: buildozer2-${{ runner.os }}-${{ github.run_number }}
 
       - name: APK yukle (artifact)
