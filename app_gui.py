@@ -430,7 +430,8 @@ class EpostaApp(App):
         self.liste_grid.clear_widgets()
         ayar = dict(self.ayar)
         engelli = list(self.cfg.get("engelli", []))
-        self.arka(lambda: c.klasor_listele(ayar, rol, 30, engelli),
+        anahtarlar = list(self.cfg.get("anahtarlar", []))
+        self.arka(lambda: c.klasor_listele(ayar, rol, 30, engelli, anahtarlar),
                   lambda sonuc: self._liste_doldur(rol, sonuc))
 
     def _liste_doldur(self, rol, sonuc):
@@ -453,7 +454,7 @@ class EpostaApp(App):
                 if ben and ben not in (m.get("to", "").lower()):
                     continue
             mhim = adr in onemli
-            mkey = c.anahtar_eslesme(m, self.cfg.get("anahtarlar", []))
+            mkey = m.get("kelime", False) or c.anahtar_eslesme(m, self.cfg.get("anahtarlar", []))
             im = "•" if (mhim or mkey) else ""
             self.liste_grid.add_widget(self._mesaj_satir(rol, m, kisi_ham, im))
             gosterilen += 1

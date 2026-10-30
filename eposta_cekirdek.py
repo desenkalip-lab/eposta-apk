@@ -496,9 +496,32 @@ def _klasor_coz(M, rol):
     return aday
 
 
-def klasor_listele(ayar, rol, adet=25, engelli=None):
+def _anahtar_uidler(M, kelimeler, uid_kapsam):
+    """uid_kapsam (liste) içinde, konu VEYA GÖVDEDE anahtar kelime geçen
+    mesajların uid kümesi. Tek UTF-8 'OR' araması + UID daraltma → HIZLI."""
+    if not kelimeler or not uid_kapsam:
+        return set()
+    kapsam = ",".join(str(u) for u in uid_kapsam)
+
+    def _kur(ks):
+        if len(ks) == 1:
+            return 'TEXT "%s"' % ks[0].replace('"', "")
+        return 'OR TEXT "%s" %s' % (ks[0].replace('"', ""), _kur(ks[1:]))
+    try:
+        krit = ("UID %s %s" % (kapsam, _kur(kelimeler))).encode("utf-8")
+        typ, vv = M.uid("SEARCH", "CHARSET", "UTF-8", krit)
+        if typ == "OK" and vv and vv[0]:
+            return set(u.decode() if isinstance(u, bytes) else str(u)
+                       for u in vv[0].split())
+    except Exception:
+        pass
+    return set()
+
+
+def klasor_listele(ayar, rol, adet=25, engelli=None, anahtarlar=None):
     """ENGELLİ göndericiler ATLANIR → en yeni `adet` GÖRÜNÜR mail döner (gelen
-    kutusunda). Başlıklar tek FETCH ile çekilir (hızlı)."""
+    kutusunda). Başlıklar tek FETCH ile çekilir (hızlı). ANAHTARLAR verilirse
+    konu VEYA GÖVDEDE kelime geçen mesaja `kelime=True` işaretlenir (bildirim)."""
     engelli = set((a or "").strip().lower() for a in (engelli or []) if a)
     bloke_uygula = (rol == "inbox") and bool(engelli)
     M = imap_baglan(ayar)
@@ -539,6 +562,11 @@ def klasor_listele(ayar, rol, adet=25, engelli=None):
                 "date": msg.get("Date", "")})
             if adet and adet > 0 and len(sonuc) >= adet:
                 break
+        kelimeler = [k.strip() for k in (anahtarlar or []) if k and k.strip()]
+        if kelimeler and rol == "inbox" and sonuc:
+            eslesen = _anahtar_uidler(M, kelimeler, [m["uid"] for m in sonuc])
+            for m in sonuc:
+                m["kelime"] = m["uid"] in eslesen
         return folder, sonuc
     finally:
         try:
