@@ -118,6 +118,28 @@ class Kart(BoxLayout):
         self._r.size = self.size
 
 
+class YenilenebilirScroll(ScrollView):
+    """Listenin EN ÜSTÜNDEYKEN aşağı çekip bırakınca yenile_cb() çağırır."""
+    yenile_cb = None
+
+    def on_touch_down(self, touch):
+        if self.collide_point(*touch.pos):
+            touch.ud["_yc_bas"] = touch.y
+            touch.ud["_yc_ust"] = self.scroll_y >= 0.999
+        return super().on_touch_down(touch)
+
+    def on_touch_up(self, touch):
+        r = super().on_touch_up(touch)
+        try:
+            if touch.ud.get("_yc_ust") and self.yenile_cb:
+                # aşağı çekme: parmak ekranda aşağı gitti → touch.y azaldı
+                if (touch.ud.get("_yc_bas", touch.y) - touch.y) > dp(90):
+                    self.yenile_cb()
+        except Exception:
+            pass
+        return r
+
+
 class EpostaApp(App):
     def build(self):
         # Açılışta herhangi bir şey patlarsa uygulama sessizce kapanmasın;
@@ -354,8 +376,9 @@ class EpostaApp(App):
         self.btn_cop.disabled = True
         ust.add_widget(self.btn_cop)
         dis.add_widget(ust)
-        # liste
-        sv = ScrollView()
+        # liste — en üstten aşağı çekince yenilenir
+        sv = YenilenebilirScroll()
+        sv.yenile_cb = self.yenile
         self.liste_grid = GridLayout(cols=1, size_hint_y=None, spacing=dp(1), padding=(0, 0))
         self.liste_grid.bind(minimum_height=self.liste_grid.setter("height"))
         sv.add_widget(self.liste_grid)
@@ -406,7 +429,8 @@ class EpostaApp(App):
         self._durum(f"{ROL_AD[rol]} yükleniyor…")
         self.liste_grid.clear_widgets()
         ayar = dict(self.ayar)
-        self.arka(lambda: c.klasor_listele(ayar, rol, 30),
+        engelli = list(self.cfg.get("engelli", []))
+        self.arka(lambda: c.klasor_listele(ayar, rol, 30, engelli),
                   lambda sonuc: self._liste_doldur(rol, sonuc))
 
     def _liste_doldur(self, rol, sonuc):
@@ -475,7 +499,28 @@ class EpostaApp(App):
         fl.add_widget(satir)
         btn = Button(background_normal="", background_color=(0, 0, 0, 0),
                      size_hint=(1, 1), pos_hint={"x": 0, "y": 0})
-        btn.bind(on_release=lambda *a: self._mesaj_ac(rol, m))
+        # Kısa tık → aç; UZUN BASMA → işlem menüsü (sağ-tık karşılığı).
+        btn._uzun = False
+        btn._ev = [None]
+
+        def _state(w, st):
+            if st == "down":
+                w._uzun = False
+                w._ev[0] = Clock.schedule_once(lambda dt: _uzun(w), 0.45)
+            elif w._ev[0]:          # bırakıldı veya kaydırmaya döndü → iptal
+                w._ev[0].cancel()
+                w._ev[0] = None
+
+        def _uzun(w):
+            w._uzun = True
+            w._ev[0] = None
+            self._liste_islem_menu(rol, m)
+
+        def _tik(w):
+            if not w._uzun:
+                self._mesaj_ac(rol, m)
+        btn.bind(state=_state)
+        btn.bind(on_release=_tik)
         fl.add_widget(btn)
         return fl
 
@@ -756,6 +801,50 @@ class EpostaApp(App):
         self.cfg.setdefault("defter", []).append({"ad": (ad or "").strip(), "eposta": adr})
         c.yapilandirma_kaydet(self.cfg)
         self.uyari("Defter", f"Eklendi: {adr}")
+
+    # ---- Listede UZUN BASMA menüsü (masaüstü sağ-tık karşılığı) ----
+    def _liste_islem_menu(self, rol, m):
+        adr = c.eposta_adresi(m.get("from", ""))
+        onemli = adr in self.cfg.get("onemli", [])
+        engelli = adr in self.cfg.get("engelli", [])
+        sec = [
+            ("Aç", lambda: self._mesaj_ac(rol, m)),
+            ("Yanıtla", lambda: self._liste_yanitla(rol, m)),
+            ("Önemliden çıkar" if onemli else "Önemli kişi yap", lambda: self._onemli_toggle(adr)),
+            ("Engeli kaldır" if engelli else "Engelle", lambda: self._engel_sonra_yenile(adr)),
+            ("Deftere Kaydet", lambda: self._deftere_kaydet(m)),
+            ("Sil", lambda: self._liste_sil(rol, m)),
+        ]
+        self.secim_popup((m.get("from", "") or "Mesaj")[:38], sec)
+
+    def _engel_sonra_yenile(self, adr):
+        self._engel_toggle(adr)
+        self.yenile()        # engellenen gönderici listeden gizlensin
+
+    def _liste_sil(self, rol, m):
+        folder = self.liste_cache.get(rol, (None, None))[0]
+        if not folder:
+            self.uyari("Sil", "Klasör bulunamadı, önce listeyi yenile.")
+            return
+        uid = m["uid"]
+        ayar = dict(self.ayar)
+        kalici = (rol == "trash")
+
+        def onayla(evet):
+            if not evet:
+                return
+            self._durum("Siliniyor…")
+            self.arka(lambda: c.mail_sil_coklu(ayar, folder, [uid], kalici=kalici),
+                      lambda s: self.yenile())
+        self.onay("Sil", "Bu mesaj silinsin mi?" + (" (kalıcı)" if kalici else ""), onayla)
+
+    def _liste_yanitla(self, rol, m):
+        """Listeden hızlı yanıt: alıcı + 'Re: konu' doldurur (gövde için mesajı aç)."""
+        self._gonder_temizle()
+        self.ti_kime.text = c.eposta_adresi(m.get("from", ""))
+        konu = m.get("subject", "")
+        self.ti_konu.text = konu if konu.lower().startswith("re:") else "Re: " + konu
+        self.git("gonder")
 
     # ================= EKRAN: GÖNDER =================
     def _ekran_gonder(self):

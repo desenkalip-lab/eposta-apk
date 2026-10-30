@@ -496,7 +496,11 @@ def _klasor_coz(M, rol):
     return aday
 
 
-def klasor_listele(ayar, rol, adet=25):
+def klasor_listele(ayar, rol, adet=25, engelli=None):
+    """ENGELLİ göndericiler ATLANIR → en yeni `adet` GÖRÜNÜR mail döner (gelen
+    kutusunda). Başlıklar tek FETCH ile çekilir (hızlı)."""
+    engelli = set((a or "").strip().lower() for a in (engelli or []) if a)
+    bloke_uygula = (rol == "inbox") and bool(engelli)
     M = imap_baglan(ayar)
     try:
         folder = _klasor_coz(M, rol)
@@ -506,24 +510,35 @@ def klasor_listele(ayar, rol, adet=25):
         typ, veri = M.uid("SEARCH", None, "ALL")
         if typ != "OK" or not veri or not veri[0]:
             return folder, []
-        uidler = veri[0].split()
-        if adet and adet > 0 and len(uidler) > adet:
-            son = uidler[-adet:]
-        else:
-            son = uidler
-        son = list(reversed(son))
+        uidler = list(reversed(veri[0].split()))        # en yeni başta
+        basliklar = {}
+        typ, dat = M.uid("FETCH", "1:*",
+                         "(BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE)])")
+        if typ == "OK" and dat:
+            for parca in dat:
+                if not isinstance(parca, tuple) or len(parca) < 2:
+                    continue
+                m = re.search(rb"UID\s+(\d+)", parca[0] if isinstance(parca[0], bytes)
+                              else str(parca[0]).encode())
+                if not m:
+                    continue
+                basliklar[m.group(1).decode()] = email.message_from_bytes(parca[1])
         sonuc = []
-        for u in son:
-            typ, d = M.uid("FETCH", u, "(BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE)])")
-            if typ != "OK" or not d or not d[0]:
+        for ub in uidler:
+            uid = ub.decode() if isinstance(ub, bytes) else str(ub)
+            msg = basliklar.get(uid)
+            if msg is None:
                 continue
-            msg = email.message_from_bytes(d[0][1])
+            if bloke_uygula and eposta_adresi(_coz(msg.get("From", ""))) in engelli:
+                continue
             sonuc.append({
-                "uid": u.decode() if isinstance(u, bytes) else str(u),
+                "uid": uid,
                 "from": _coz(msg.get("From", "")), "to": _coz(msg.get("To", "")),
                 "cc": _coz(msg.get("Cc", "")),
                 "subject": _coz(msg.get("Subject", "(konu yok)")),
                 "date": msg.get("Date", "")})
+            if adet and adet > 0 and len(sonuc) >= adet:
+                break
         return folder, sonuc
     finally:
         try:
