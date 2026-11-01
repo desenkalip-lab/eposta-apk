@@ -482,7 +482,7 @@ class EpostaApp(App):
         from kivy.graphics import Color, RoundedRectangle
         fl = FloatLayout(size_hint_y=None, height=dp(72))
         # Sağda hızlı Yanıtla butonuna yer bırak (right padding dp(54))
-        satir = BoxLayout(orientation="vertical", padding=(dp(12), dp(8), dp(56), dp(8)),
+        satir = BoxLayout(orientation="vertical", padding=(dp(12), dp(8), dp(78), dp(8)),
                           spacing=dp(3), size_hint=(1, 1), pos_hint={"x": 0, "y": 0})
         with satir.canvas.before:
             Color(*CARD)
@@ -538,9 +538,11 @@ class EpostaApp(App):
         # Satırda hızlı Yanıtla butonu (maili açmadan yanıt) — tam alan tık butonunun
         # üstünde olduğu için kendi dokunuşunu kapar.
         if rol in ("inbox", "self"):
-            yani = duz_dugme("↩", PRIMARY, boy=44, size_hint_x=None,
-                             width=dp(44), font_size="22sp")
-            yani.pos_hint = {"right": 0.975, "center_y": 0.5}
+            # NOT: Kivy varsayilan yazitipi ↩ (U+21A9) icermez -> tofu kutu cikar.
+            # Bu yuzden metin "Yanıt" kullaniyoruz (kesin render edilir).
+            yani = duz_dugme("Yanıt", PRIMARY, boy=44, size_hint_x=None,
+                             width=dp(64), font_size="12sp")
+            yani.pos_hint = {"right": 0.98, "center_y": 0.5}
             yani.bind(on_release=lambda w, r=rol, mm=m: self._liste_yanitla(r, mm))
             fl.add_widget(yani)
         return fl
