@@ -98,7 +98,18 @@ ROL_AD = {"inbox": "Gelen Kutusu", "sent": "Gönderilmiş",
 def duz_dugme(metin, renk=PRIMARY, yazi=(1, 1, 1, 1), boy=48, **kw):
     kw.setdefault("font_size", "15sp")
     b = Button(text=metin, size_hint_y=None, height=dp(boy),
-               background_normal="", background_color=renk, color=yazi, **kw)
+               background_normal="", background_down="",
+               background_color=(0, 0, 0, 0), color=yazi, **kw)
+    # Yuvarlak köşeli zemin (varsayılan köşeli zemin yerine)
+    from kivy.graphics import Color, RoundedRectangle
+    with b.canvas.before:
+        b._bg_c = Color(*renk)
+        b._bg_r = RoundedRectangle(pos=b.pos, size=b.size, radius=[dp(11)])
+
+    def _bg_guncelle(*a):
+        b._bg_r.pos = b.pos
+        b._bg_r.size = b.size
+    b.bind(pos=_bg_guncelle, size=_bg_guncelle)
     return b
 
 
@@ -107,10 +118,10 @@ class Kart(BoxLayout):
     def __init__(self, **kw):
         super().__init__(**kw)
         self.orientation = "vertical"
-        from kivy.graphics import Color, Rectangle
+        from kivy.graphics import Color, RoundedRectangle
         with self.canvas.before:
             Color(*CARD)
-            self._r = Rectangle(pos=self.pos, size=self.size)
+            self._r = RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(12)])
         self.bind(pos=self._g, size=self._g)
 
     def _g(self, *a):
@@ -468,13 +479,14 @@ class EpostaApp(App):
 
     def _mesaj_satir(self, rol, m, kisi, im):
         from kivy.uix.floatlayout import FloatLayout
-        from kivy.graphics import Color, Rectangle
+        from kivy.graphics import Color, RoundedRectangle
         fl = FloatLayout(size_hint_y=None, height=dp(72))
-        satir = BoxLayout(orientation="vertical", padding=(dp(10), dp(8)), spacing=dp(3),
-                          size_hint=(1, 1), pos_hint={"x": 0, "y": 0})
+        # Sağda hızlı Yanıtla butonuna yer bırak (right padding dp(54))
+        satir = BoxLayout(orientation="vertical", padding=(dp(12), dp(8), dp(56), dp(8)),
+                          spacing=dp(3), size_hint=(1, 1), pos_hint={"x": 0, "y": 0})
         with satir.canvas.before:
             Color(*CARD)
-            r = Rectangle(pos=satir.pos, size=satir.size)
+            r = RoundedRectangle(pos=satir.pos, size=satir.size, radius=[dp(12)])
         satir.bind(pos=lambda *a: setattr(r, "pos", satir.pos),
                    size=lambda *a: setattr(r, "size", satir.size))
         ust = f"{im} {kisi}".strip()
@@ -523,6 +535,14 @@ class EpostaApp(App):
         btn.bind(state=_state)
         btn.bind(on_release=_tik)
         fl.add_widget(btn)
+        # Satırda hızlı Yanıtla butonu (maili açmadan yanıt) — tam alan tık butonunun
+        # üstünde olduğu için kendi dokunuşunu kapar.
+        if rol in ("inbox", "self"):
+            yani = duz_dugme("↩", PRIMARY, boy=44, size_hint_x=None,
+                             width=dp(44), font_size="22sp")
+            yani.pos_hint = {"right": 0.975, "center_y": 0.5}
+            yani.bind(on_release=lambda w, r=rol, mm=m: self._liste_yanitla(r, mm))
+            fl.add_widget(yani)
         return fl
 
     def _kisalt(self, s, n):
