@@ -66,18 +66,23 @@ jobs:
           rm -rf .buildozer/android/platform/python-for-android
           rm -rf .buildozer/android/platform/build-*/dists
 
-      # KALICI IMZA: repodaki sabit debug keystore'u kullan. Boylece her derleme
-      # AYNI imzayla imzalanir; onbellek silinse bile imza DEGISMEZ, APK'lar hep
-      # ustune yuklenir (uninstall gerekmez).
-      - name: Sabit imza anahtari
-        run: |
-          mkdir -p ~/.android
-          cp ci/debug.keystore ~/.android/debug.keystore
-          keytool -list -v -keystore ~/.android/debug.keystore -storepass android \
-            -alias androiddebugkey 2>/dev/null | grep -i SHA256 || true
-
       - name: APK derle
         run: buildozer -v android debug
+
+      # KALICI IMZA: buildozer/p4a her derlemede FARKLI bir debug anahtari uretir
+      # (bu yuzden APK'lar birbirinin ustune yuklenmiyordu). Ciktiyi apksigner ile
+      # repodaki SABIT ci/debug.keystore ile YENIDEN imzaliyoruz -> imza her zaman
+      # AYNI (SHA1 2103667b...), APK'lar hep ustune yuklenir, uninstall gerekmez.
+      - name: Sabit imza ile yeniden imzala
+        run: |
+          SDK="$HOME/.buildozer/android/platform/android-sdk"
+          APKSIGNER=$(ls -d "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1)
+          echo "apksigner: $APKSIGNER"
+          for apk in bin/*.apk; do
+            "$APKSIGNER" sign --ks ci/debug.keystore --ks-pass pass:android \
+              --ks-key-alias androiddebugkey --key-pass pass:android "$apk"
+            "$APKSIGNER" verify --print-certs "$apk" | grep -i "SHA-1 digest" || true
+          done
 
       - name: Onbellegi kaydet
         if: always()
